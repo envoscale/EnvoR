@@ -1,7 +1,7 @@
 # `envor.theme`
 
 > **Status:** Experimental (M8.6). Tests: `theme/tests/`. Spec:
-> [`docs/lumen/`](../../../docs/lumen/README.md).
+> [`EnvoScale/envor/`](../../../EnvoScale/envor/README.md).
 
 The EnvoR design language's tokens as typed values: color roles for a light and a dark
 scheme, the type scale, the 4-pixel spacing scale, corner radii, control metrics and

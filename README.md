@@ -40,4 +40,4 @@ commit in [`envolang.ref`](envolang.ref).
 
 ## License
 
-Same as EnvoScale: see [LICENSE](LICENSE).
+Same as EnvoLang: see [LICENSE](LICENSE).

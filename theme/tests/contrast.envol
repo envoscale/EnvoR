@@ -1,4 +1,4 @@
-// envor.theme meets WCAG 2.2 AA contrast (docs/lumen/README.md, principle 3): every text
+// envor.theme meets WCAG 2.2 AA contrast (EnvoScale/envor/README.md, principle 3): every text
 // color reaches 4.5:1 on every surface, control edges 3:1, and text on the accent 4.5:1,
 // in both schemes. Contrast is (L1 + 0.05) / (L2 + 0.05) of the colors' relative
 // luminances (sRGB).

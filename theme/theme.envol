@@ -1,4 +1,4 @@
-// envor.theme: the EnvoR design language's tokens as typed values (docs/lumen/README.md).
+// envor.theme: the EnvoR design language's tokens as typed values (EnvoScale/envor/README.md).
 // tokens.envon is the source; Light and Dark here are the same values, and the tests check
 // that they agree. A theme is a Theme value: change any field to restyle a program.
 namespace envor.theme;

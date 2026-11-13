@@ -1,5 +1,5 @@
 #eon 1
-// Envor: rendering for Envol. Used through Envopm:
+// EnvoR: rendering for EnvoL. Used through EnvoPM:
 //     envor = { git = "https://github.com/envoscale/Envor", rev = "<commit>" }
 package {
     name    = "envor"

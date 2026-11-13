@@ -1,6 +1,6 @@
 #eon 1
 
-// Envor version 1 (docs/lumen/README.md). envor.theme exposes these as typed values; its
+// EnvoR version 1 (EnvoScale/envor/README.md). envor.theme exposes these as typed values; its
 // tests check that the two agree.
 version = 1
 
