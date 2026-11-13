@@ -1,4 +1,4 @@
-// envor.theme: the Envor design language's tokens as typed values (docs/lumen/README.md).
+// envor.theme: the EnvoR design language's tokens as typed values (docs/lumen/README.md).
 // tokens.envon is the source; Light and Dark here are the same values, and the tests check
 // that they agree. A theme is a Theme value: change any field to restyle a program.
 namespace envor.theme;
@@ -129,7 +129,7 @@ Theme Shared(bool dark, Colors c) => new Theme {
     MotionFast = 120, MotionNormal = 200,
 };
 
-// Envor's light scheme.
+// EnvoR's light scheme.
 public Theme Light() => Shared(false, new Colors {
     Background = 0xf5f5f7, Surface = 0xffffff, SurfaceRaised = 0xffffff, SurfacePressed = 0xe8e8ed,
     Text = 0x1d1d1f, TextSecondary = 0x68686c, Separator = 0xc7c7cc, ControlEdge = 0x85858a,
@@ -137,7 +137,7 @@ public Theme Light() => Shared(false, new Colors {
     Danger = 0xd30015, Success = 0x1f7835, Warning = 0xab4d00,
 });
 
-// Envor's dark scheme.
+// EnvoR's dark scheme.
 public Theme Dark() => Shared(true, new Colors {
     Background = 0x000000, Surface = 0x1c1c1e, SurfaceRaised = 0x2c2c2e, SurfacePressed = 0x3a3a3c,
     Text = 0xf5f5f7, TextSecondary = 0xa3a3a8, Separator = 0x48484a, ControlEdge = 0x8e8e93,
@@ -146,7 +146,7 @@ public Theme Dark() => Shared(true, new Colors {
 });
 
 // A theme from tokens written in EON (tokens.envon's shape), for scheme "light" or "dark".
-// A value the tokens leave out keeps Envor's.
+// A value the tokens leave out keeps EnvoR's.
 public Result<Theme, string> FromTokens(str src, str scheme) {
     Result<eon.Value, eon.ParseError> r = eon.Parse(src);
     if (r.IsErr()) return Err(r.UnwrapErr().Describe());

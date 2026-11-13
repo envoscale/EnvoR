@@ -3,7 +3,7 @@
 // lights and seen by a camera. The renderer clips triangles at the near plane, rasterizes
 // them with a depth buffer and perspective-correct interpolation, and shades each pixel
 // physically (Cook-Torrance: GGX distribution, Smith-Schlick geometry, Schlick Fresnel),
-// then tone-maps (ACES) into sRGB. All of it is IEEE arithmetic in Envol, so a frame is
+// then tone-maps (ACES) into sRGB. All of it is IEEE arithmetic in EnvoL, so a frame is
 // the same, bit for bit, in every build and in the script runtime.
 namespace envor.render3d;
 

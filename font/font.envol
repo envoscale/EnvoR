@@ -522,7 +522,7 @@ public Result<Font, string> Load(str path) {
     return Font.ParseText(data.AsStr());
 }
 
-// A font the system has: "sans-serif", "serif" or "monospace". Envol bundles no fonts;
+// A font the system has: "sans-serif", "serif" or "monospace". EnvoL bundles no fonts;
 // this looks in the usual places on Windows and Linux.
 public Result<Font, string> System(str family) {
     List<str> paths = List<str>.New();

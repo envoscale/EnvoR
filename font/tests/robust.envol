@@ -6,7 +6,7 @@
 // expect: corrupted: all handled
 use envor.font;
 
-// "Envol Test", a font of six glyphs drawn for these tests (font/tests/mkfont.py makes
+// "EnvoL Test", a font of six glyphs drawn for these tests (font/tests/mkfont.py makes
 // it): .notdef, space, 'l' (a bar), 'O' (a ring of quadratic curves), 'A' (a triangle
 // with a hole), 'i' (a composite of two bars).
 u8 Nib(u8 c) {
