@@ -44,6 +44,21 @@ u8 HexDigit(u8 c) {
 
 u8 Byte(str h, usize at) => HexDigit(h[at]) * 16 + HexDigit(h[at + 1]);
 
+// c as the four bytes of a pixel, read as one little-endian u32.
+u32 Packed(Color c) => c.R as u32 | (c.G as u32) << 8 | (c.B as u32) << 16 | (c.A as u32) << 24;
+
+// n zero bytes, allocated at once.
+List<u8> Zeros(usize n) {
+    List<u8> l = List<u8>.New();
+    if (n == 0) return l;
+    unsafe {
+        l.Data = alloc(n);
+        l.Count = n;
+        l.Cap = n;
+    }
+    return l;
+}
+
 // x * y / 255, rounded.
 u32 Mul255(u32 x, u32 y) {
     u32 t = x * y + 128;
@@ -61,9 +76,9 @@ public struct Canvas {
     i32 CY1;
 
     public static Canvas New(i32 width, i32 height) {
-        Canvas c = new Canvas { W = width, H = height, Px = List<u8>.New(), CX0 = 0, CY0 = 0, CX1 = width, CY1 = height };
-        usize n = (width * height * 4) as usize;
-        for (usize i = 0; i < n; i++) c.Px.Push(0);
+        if (width < 0) width = 0;
+        if (height < 0) height = 0;
+        Canvas c = new Canvas { W = width, H = height, Px = Zeros((width as usize) * (height as usize) * 4), CX0 = 0, CY0 = 0, CX1 = width, CY1 = height };
         return c;
     }
 
@@ -127,17 +142,56 @@ public struct Canvas {
         }
     }
 
+    // Coverage a (w x h, 0-255) drawn at (ox, oy) in color c: each pixel blended as Blend
+    // would with c's alpha scaled by the coverage. The usual case, an opaque destination,
+    // is blended inline.
+    public void BlendMask(ref this, u8[] a, i32 w, i32 h, i32 ox, i32 oy, Color c) {
+        i32 x0 = Max(ox, this.CX0);
+        i32 y0 = Max(oy, this.CY0);
+        i32 x1 = Min(ox + w, this.CX1);
+        i32 y1 = Min(oy + h, this.CY1);
+        if (x0 >= x1 || y0 >= y1 || c.A == 0) return;
+        u32 ca = c.A as u32;
+        u32 r = c.R as u32;
+        u32 g = c.G as u32;
+        u32 b = c.B as u32;
+        unsafe {
+            for (i32 y = y0; y < y1; y++) {
+                usize arow = ((y - oy) * w) as usize;
+                *u8 p = &this.Px.Data[((y as usize) * (this.W as usize) + x0 as usize) * 4];
+                for (i32 x = x0; x < x1; x++) {
+                    u32 cov = a[arow + (x - ox) as usize] as u32;
+                    if (cov != 0) {
+                        u32 sa = (ca * cov + 127) / 255;
+                        if (sa == 255) {
+                            p[0] = r as u8;
+                            p[1] = g as u8;
+                            p[2] = b as u8;
+                            p[3] = 255;
+                        } else if (sa != 0 && p[3] == 255) {
+                            // opaque below: out alpha is 255, the rest weighs 255 - sa
+                            u32 dw = 255 - sa;
+                            p[0] = ((r * sa + p[0] as u32 * dw + 127) / 255) as u8;
+                            p[1] = ((g * sa + p[1] as u32 * dw + 127) / 255) as u8;
+                            p[2] = ((b * sa + p[2] as u32 * dw + 127) / 255) as u8;
+                        } else if (sa != 0) {
+                            this.Blend(x, y, Color.Rgba(c.R, c.G, c.B, sa as u8));
+                        }
+                    }
+                    p = &p[4];
+                }
+            }
+        }
+    }
+
     // Every pixel set to c (no blending).
     public void Clear(ref this, Color c) {
+        usize n = (this.W as usize) * (this.H as usize);
+        if (n == 0) return;
+        u32 v = Packed(c);
         unsafe {
-            *u8 p = this.Px.Data;
-            usize n = (this.W * this.H) as usize;
-            for (usize i = 0; i < n; i++) {
-                p[4 * i] = c.R;
-                p[4 * i + 1] = c.G;
-                p[4 * i + 2] = c.B;
-                p[4 * i + 3] = c.A;
-            }
+            *u32 p = this.Px.Data as *u32;
+            for (usize i = 0; i < n; i++) p[i] = v;
         }
     }
 
@@ -146,6 +200,29 @@ public struct Canvas {
         i32 y0 = Max(y, this.CY0);
         i32 x1 = Min(x + w, this.CX1);
         i32 y1 = Min(y + h, this.CY1);
+        if (x0 >= x1 || y0 >= y1 || c.A == 0) return;
+        if (c.A == 255) {
+            // opaque: whole pixels stored, a row at a time, two at once where aligned
+            u32 v = Packed(c);
+            u64 vv = v as u64 | (v as u64) << 32;
+            usize width = (x1 - x0) as usize;
+            unsafe {
+                for (i32 py = y0; py < y1; py++) {
+                    *u32 row = &(this.Px.Data as *u32)[(py as usize) * (this.W as usize) + x0 as usize];
+                    usize k = 0;
+                    if ((row as usize) & 7 != 0 && k < width) {
+                        row[0] = v;
+                        k = 1;
+                    }
+                    *u64 pairs = &row[k] as *u64;
+                    usize n = (width - k) / 2;
+                    for (usize j = 0; j < n; j++) pairs[j] = vv;
+                    k += 2 * n;
+                    if (k < width) row[k] = v;
+                }
+            }
+            return;
+        }
         for (i32 py = y0; py < y1; py++) {
             for (i32 px = x0; px < x1; px++) this.Blend(px, py, c);
         }
@@ -275,6 +352,7 @@ public struct Canvas {
     // The image as a binary PPM (P6): RGB, alpha dropped. For looking at a test's output.
     public string Ppm(in this) {
         string s = string.From("P6\n");
+        s.Reserve((this.W as usize) * (this.H as usize) * 3 + 32);
         s.Append(text.Int(this.W as i64).AsStr());
         s.AppendByte(' ');
         s.Append(text.Int(this.H as i64).AsStr());

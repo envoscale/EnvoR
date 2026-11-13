@@ -8,6 +8,17 @@ namespace envor.font;
 
 use envor.gfx;
 use std.fs;
+use alloc.map.{Map};
+
+// What drawing has looked up and rendered before, kept for the font's life: glyph indexes
+// by code point, and coverage by glyph, size and sub-pixel offset (so a cached glyph is
+// exactly the one Render would make). The Font holds it on the heap, so drawing through a
+// Font passed as `in` still fills it.
+struct GlyphCache {
+    Map<u64, u64> Index;    // code point -> 1 + glyph index
+    Map<u64, u64> Slots;    // glyph | size << 24 | shift << 48 -> 1 + index in Masks
+    List<Mask> Masks;
+}
 
 // A glyph's coverage: W x H alpha values (0-255), rows from the top. Left and Top place
 // its top-left corner relative to the pen on the baseline (Top is negative above it).
@@ -80,23 +91,25 @@ public struct Font {
     i32 Asc;
     i32 Desc;
     i32 Gap;
+    usize Cache;            // *GlyphCache
 
     // Parses a TrueType font (a .ttf file's bytes).
     public static Result<Font, string> Parse(u8[] data) {
-        List<u8> d = List<u8>.New();
-        for (usize i = 0; i < data.Len; i++) d.Push(data[i]);
-        return Font.Build(d);
+        return Font.Build(CopyBytes(data));
     }
 
     // Parses a font read as text (std.fs.ReadText gives a file's bytes as a string).
     public static Result<Font, string> ParseText(str data) {
-        List<u8> d = List<u8>.New();
-        for (usize i = 0; i < data.Len; i++) d.Push(data[i]);
-        return Font.Build(d);
+        unsafe { return Font.Build(CopyBytes(slice_from(data.Ptr, data.Len))); }
     }
 
     static Result<Font, string> Build(List<u8> d) {
-        Font f = new Font { D = d, Glyf = 0, GlyfLen = 0, Loca = 0, LongLoca = false, Hmtx = 0, Metrics = 0, Glyphs = 0, Cmap = 0, CmapFormat = 0, Upem = 0, Asc = 0, Desc = 0, Gap = 0 };
+        Font f = new Font { D = d, Glyf = 0, GlyfLen = 0, Loca = 0, LongLoca = false, Hmtx = 0, Metrics = 0, Glyphs = 0, Cmap = 0, CmapFormat = 0, Upem = 0, Asc = 0, Desc = 0, Gap = 0, Cache = 0 };
+        unsafe {
+            *GlyphCache gc = alloc(sizeof(GlyphCache)) as *GlyphCache;
+            gc[0] = new GlyphCache { Index = Map<u64, u64>.New(), Slots = Map<u64, u64>.New(), Masks = List<Mask>.New() };
+            f.Cache = gc as usize;
+        }
         u32 version = f.U32(0);
         if (version != 0x00010000 && version != 0x74727565) return Err(string.From("not a TrueType font"));
         usize head = f.Table("head");
@@ -226,13 +239,26 @@ public struct Font {
         return this.U16(this.Hmtx + 4 * i as usize) as i32;
     }
 
+    // The glyph for code point c, through the cache.
+    u32 GlyphOf(in this, u32 c) {
+        if (this.Cache == 0) return this.GlyphIndex(c);
+        unsafe {
+            *GlyphCache gc = this.Cache as *GlyphCache;
+            u64 v = gc[0].Index.GetOr(c as u64, 0);
+            if (v != 0) return (v - 1) as u32;
+            u32 g = this.GlyphIndex(c);
+            gc[0].Index.Set(c as u64, g as u64 + 1);
+            return g;
+        }
+    }
+
     // How wide text is at size px (pixels per em), in pixels, rounded up.
     public i32 Measure(in this, str t, u32 px) {
         i64 w = 0;
         usize i = 0;
         while (i < t.Len) {
             u32 c = NextChar(t, ref i);
-            w += this.Advance(this.GlyphIndex(c)) as i64 * px as i64 * 256 / this.Upem as i64;
+            w += this.Advance(this.GlyphOf(c)) as i64 * px as i64 * 256 / this.Upem as i64;
         }
         return ((w + 255) / 256) as i32;
     }
@@ -490,24 +516,51 @@ public struct Font {
     public i32 Draw(in this, ref gfx.Canvas c, i32 x, i32 y, str t, u32 px, gfx.Color color) {
         i64 pen = x as i64 * 256;
         usize i = 0;
+        u32 ca = color.Alpha() as u32;
         while (i < t.Len) {
             u32 ch = NextChar(t, ref i);
-            u32 g = this.GlyphIndex(ch);
-            Mask m = this.Render(g, px, (pen & 255) as u32);
-            i32 ox = (pen >> 8) as i32 + m.L;
-            i32 oy = y + m.T;
-            for (i32 my = 0; my < m.H; my++) {
-                for (i32 mx = 0; mx < m.W; mx++) {
-                    u32 cov = m.At(mx, my) as u32;
-                    if (cov == 0) continue;
-                    u32 alpha = (color.Alpha() as u32 * cov + 127) / 255;
-                    c.Blend(ox + mx, oy + my, gfx.Color.Rgba(color.Red(), color.Green(), color.Blue(), alpha as u8));
+            u32 g = this.GlyphOf(ch);
+            u32 shift = (pen & 255) as u32;
+            if (this.Cache == 0) {
+                Mask m = this.Render(g, px, shift);
+                BlitMask(ref c, m.A.AsSlice(), m.W, m.H, (pen >> 8) as i32 + m.L, y + m.T, color, ca);
+            } else {
+                unsafe {
+                    *GlyphCache gc = this.Cache as *GlyphCache;
+                    u64 key = g as u64 | (px as u64) << 24 | (shift as u64) << 48;
+                    u64 slot = gc[0].Slots.GetOr(key, 0);
+                    if (slot == 0) {
+                        gc[0].Masks.Push(this.Render(g, px, shift));
+                        slot = gc[0].Masks.Len() as u64;
+                        gc[0].Slots.Set(key, slot);
+                    }
+                    Mask[] ms = gc[0].Masks.AsSlice();
+                    usize k = (slot - 1) as usize;
+                    BlitMask(ref c, ms[k].A.AsSlice(), ms[k].W, ms[k].H, (pen >> 8) as i32 + ms[k].L, y + ms[k].T, color, ca);
                 }
             }
             pen += this.Advance(g) as i64 * px as i64 * 256 / this.Upem as i64;
         }
         return ((pen + 255) >> 8) as i32;
     }
+}
+
+// Draws coverage a (w x h) at (ox, oy) in color.
+void BlitMask(ref gfx.Canvas c, u8[] a, i32 w, i32 h, i32 ox, i32 oy, gfx.Color color, u32 ca) {
+    c.BlendMask(a, w, h, ox, oy, color);
+}
+
+// b's bytes in a new list, copied at once.
+List<u8> CopyBytes(u8[] b) {
+    List<u8> d = List<u8>.New();
+    if (b.Len == 0) return d;
+    unsafe {
+        d.Data = alloc(b.Len);
+        for (usize i = 0; i < b.Len; i++) d.Data[i] = b[i];
+        d.Count = b.Len;
+        d.Cap = b.Len;
+    }
+    return d;
 }
 
 // The font file at path.
