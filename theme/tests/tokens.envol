@@ -1,0 +1,35 @@
+// envor.theme: the typed themes agree with tokens.envon, the design language's source,
+// and tokens can override a theme's values.
+// expect: light agrees with tokens.envon
+// expect: dark agrees with tokens.envon
+// expect: override accent #ff2d55, text kept #1d1d1f, body 16/22
+// expect: bad tokens: 1:3: expected `=` or `{` after the key
+use envor.theme;
+use std.fs;
+use alloc.text;
+
+// The tests run in build/envo-test/run.
+var r = fs.ReadText("../../../theme/tokens.envon");
+if (r.IsErr()) {
+    print("cannot read tokens.envon");
+} else {
+    string src = r.Unwrap();
+    theme.Theme l = theme.FromTokens(src.AsStr(), "light").Unwrap();
+    theme.Theme d = theme.FromTokens(src.AsStr(), "dark").Unwrap();
+    if (l.Describe().Equals(theme.Light().Describe().AsStr())) print("light agrees with tokens.envon");
+    else write(1, l.Describe().AsStr());
+    if (d.Describe().Equals(theme.Dark().Describe().AsStr())) print("dark agrees with tokens.envon");
+    else write(1, d.Describe().AsStr());
+}
+theme.Theme o = theme.FromTokens("light {\n    accent = \"#ff2d55\"\n}\ntype {\n    body = [16, 22]\n}\n", "light").Unwrap();
+write(1, "override accent #");
+write(1, text.Hex(o.C.Accent as u64, 6).AsStr());
+write(1, ", text kept #");
+write(1, text.Hex(o.C.Text as u64, 6).AsStr());
+write(1, ", body ");
+write(1, text.Uint(o.Body.Size as u64).AsStr());
+write(1, "/");
+print(text.Uint(o.Body.Line as u64).AsStr());
+Result<theme.Theme, string> bad = theme.FromTokens("a b", "light");
+write(1, "bad tokens: ");
+print(bad.UnwrapErr().AsStr());

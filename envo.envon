@@ -1,0 +1,10 @@
+#eon 1
+// Envor: rendering for Envol. Used through Envopm:
+//     envor = { git = "https://github.com/envoscale/Envor", rev = "<commit>" }
+package {
+    name    = "envor"
+    version = "0.1.0"
+    edition = "2027"
+}
+dependencies {
+}
